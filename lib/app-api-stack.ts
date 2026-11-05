@@ -94,8 +94,10 @@ export class AppApiStack extends cdk.Stack {
     // Routes
     const moviesResource = api.root.addResource('movies');
 
+    // GET roles must require a signed-in user. The route was missing the authorizer,
+// so anyone could call it; userAuth checks the Cognito token cookie first.
     const movieRolesResource = moviesResource.addResource('{movieID}').addResource('roles');
-    movieRolesResource.addMethod('GET', new apig.LambdaIntegration(getMovieRolesFn) );
+    movieRolesResource.addMethod('GET', new apig.LambdaIntegration(getMovieRolesFn), userAuth);
 
     api.root
       .addResource('actors')
