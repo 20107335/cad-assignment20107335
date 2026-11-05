@@ -3,6 +3,7 @@ import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import {
   actorKey,
   ddb,
+  isMovieItem,
   isRoleItem,
   movieKey,
   parseId,
@@ -58,6 +59,12 @@ export const handler = async (
     );
 
     const resultItems = queryResult.Items ?? [];
+
+    // Issue 3: an unknown movie returned 200 with an empty list.
+    // The movie item shares the partition with its roles, so if it's missing the movie doesn't exist.
+    if (!resultItems.some(isMovieItem)) {
+      return response(404, { message: `Movie ${movieId} not found` });
+    }
     return response(200, { data: resultItems.filter(isRoleItem).map(toRole) });
   } catch (err) {
     console.error("DynamoDB error:", err);
