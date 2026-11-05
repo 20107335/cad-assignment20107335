@@ -23,7 +23,7 @@ export const handler = async (
     return response(400, { message: "movieID must be a positive integer" });
   }
 
-  // Issue: ?actor= was ignored. Read it and reject anything that isn't a positive integer
+  // Issue P1: ?actor= was ignored. Read it and reject anything that isn't a positive integer (400).
   const actorParam = event.queryStringParameters?.actor;
   const actorId = parseId(actorParam);
   if (actorParam !== undefined && actorId === undefined) {
@@ -31,10 +31,9 @@ export const handler = async (
   }
 
   try {
-     // If an actor is given, fetch that one role directly by its key.
+    // If an actor is given, fetch that one role directly by its key (movieID | actorID);
     // 404 if the actor has no role in the movie. Otherwise fall through and return all roles.
     if (actorId !== undefined) {
-      // A role's key is movieID/actorID, so it can be fetched directly.
       const roleResult = await ddb.send(
         new GetCommand({
           TableName: tableName,
@@ -49,16 +48,7 @@ export const handler = async (
       return response(200, { data: toRole(roleResult.Item) });
     }
 
-    const queryResult = await ddb.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: "PK = :pk",
-        ExpressionAttributeValues: { ":pk": movieKey(movieId) },
-        // ExclusiveStartKey: lastKey,
-      })
-    );
-
-    const resultItems = queryResult.Items ?? [];
+    const resultItems = await queryMovieItems(movieId);
 
     // Issue 3: an unknown movie returned 200 with an empty list.
     // The movie item shares the partition with its roles, so if it's missing the movie doesn't exist.
@@ -73,4 +63,24 @@ export const handler = async (
       error: err,
     });
   }
+};
+
+// Issue P2: only the first page of query results was read.
+// Follow LastEvaluatedKey until DynamoDB has returned every item in the movie's partition.
+const queryMovieItems = async (movieId: number) => {
+  const items: Record<string, any>[] = [];
+  let lastKey: Record<string, any> | undefined;
+  do {
+    const result = await ddb.send(
+      new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: "PK = :pk",
+        ExpressionAttributeValues: { ":pk": movieKey(movieId) },
+        ExclusiveStartKey: lastKey,
+      })
+    );
+    items.push(...(result.Items ?? []));
+    lastKey = result.LastEvaluatedKey;
+  } while (lastKey);
+  return items;
 };
