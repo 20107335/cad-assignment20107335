@@ -3,8 +3,10 @@ import type { APIGatewayProxyEvent } from 'aws-lambda';
 // Logs "<cognito username>   <request path>[?query]" to CloudWatch, e.g.
 //   doconnor   /actors/4321?movie=1234
 export const logRequest = (event: APIGatewayProxyEvent): void => {
-  // TODO - The authorizer lambda adds relevant info to the event object's context.  )
-  const username = 'TODO';
+  // Issue 5: the username was hard-coded as 'TODO'.
+  // The authorizer passes the Cognito username, requests made with
+  // the admin API key don't go through the authorizer, so they are logged as 'admin'.
+  const username = event.requestContext.authorizer?.username ?? 'admin';
   const params = Object.entries(event.queryStringParameters ?? {}).filter(
     (entry): entry is [string, string] => entry[1] !== undefined,
   );
