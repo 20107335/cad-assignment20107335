@@ -50,6 +50,9 @@ export class AppApiStack extends cdk.Stack {
 
     table.grantReadData(getMovieRolesFn);
     table.grantReadData(getActorFn);
+     // Issue 7: the add-movie-role Lambda had no table access. It needs read access to check
+    // the movie and actor exist, and write access to save the new role.
+    table.grantReadWriteData(addMovieRoleFn);
 
     // Sample data, written once when the stack is created.
     const items = seedItems();
