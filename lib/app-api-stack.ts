@@ -95,9 +95,15 @@ export class AppApiStack extends cdk.Stack {
     const moviesResource = api.root.addResource('movies');
 
     // GET roles must require a signed-in user. The route was missing the authorizer,
-// so anyone could call it; userAuth checks the Cognito token cookie first.
+    // so anyone could call it; userAuth checks the Cognito token cookie first.
     const movieRolesResource = moviesResource.addResource('{movieID}').addResource('roles');
     movieRolesResource.addMethod('GET', new apig.LambdaIntegration(getMovieRolesFn), userAuth);
+
+    // Issue 6: the add-movie-role Lambda was created but never attached to the API.
+    // POST /movies/roles for the administrator, so no user authorizer (API key added separately).
+    moviesResource
+      .addResource('roles')
+      .addMethod('POST', new apig.LambdaIntegration(addMovieRoleFn));
 
     api.root
       .addResource('actors')
