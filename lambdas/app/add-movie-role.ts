@@ -2,10 +2,13 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { actorKey, ddb, movieKey, type Role, tableName } from "../shared/db";
 import { isResponse, parseJsonObject, response } from "../shared/http";
+import { logRequest } from "../shared/request-logger";
 
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
+  logRequest(event);
+
   const body = parseJsonObject(event);
   if (isResponse(body)) return body;
 
@@ -17,7 +20,20 @@ export const handler = async (
   };
 
   try {
-    //  TOD∏O - Add role if its IDs are valid
+    // Issue 8: the role was never saved, the handler returned 201 without writing to DynamoDB.
+    // Store it under the spec's role key, PK = movieID, SK = actorID.
+    await ddb.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Put: {
+              TableName: tableName,
+              Item: { PK: movieKey(role.movieId), SK: actorKey(role.actorId), ...role },
+            },
+          },
+        ],
+      })
+    );
     return response(201, { message: "Role added", data: role });
   } catch (err) {
     console.error("DynamoDB error:", err);
