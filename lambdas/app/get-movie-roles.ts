@@ -1,7 +1,6 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import {
-  actorKey,
   ddb,
   isMovieItem,
   isRoleItem,
@@ -23,7 +22,7 @@ export const handler = async (
     return response(400, { message: "movieID must be a positive integer" });
   }
 
-  // Issue P1: ?actor= was ignored. Read it and reject anything that isn't a positive integer (400).
+  // Issue 2: ?actor= was ignored. Read it and reject anything that isn't a positive integer (400).
   const actorParam = event.queryStringParameters?.actor;
   const actorId = parseId(actorParam);
   if (actorParam !== undefined && actorId === undefined) {
@@ -31,39 +30,35 @@ export const handler = async (
   }
 
   try {
-    // If an actor is given, fetch that one role directly by its key (movieID | actorID);
-    // 404 if the actor has no role in the movie. Otherwise fall through and return all roles.
-    if (actorId !== undefined) {
-      const roleResult = await ddb.send(
-        new GetCommand({
-          TableName: tableName,
-          Key: { PK: movieKey(movieId), SK: actorKey(actorId) },
-        })
-      );
-      if (!roleResult.Item) {
-        return response(404, {
-          message: `Actor ${actorId} has no role in movie ${movieId}`,
-        });
-      }
-      return response(200, { data: toRole(roleResult.Item) });
-    }
-
     const resultItems = await queryMovieItems(movieId);
 
     // Issue 3: an unknown movie returned 200 with an empty list.
+    // Issue 14: this check now also covers ?actor=, which previously blamed the actor instead.
     // The movie item shares the partition with its roles, so if it's missing the movie doesn't exist.
     if (!resultItems.some(isMovieItem)) {
       return response(404, { message: `Movie ${movieId} not found` });
     }
-    return response(200, { data: resultItems.filter(isRoleItem).map(toRole) });
+
+    const roles = resultItems.filter(isRoleItem).map(toRole);
+    if (actorId === undefined) {
+      return response(200, { data: roles });
+    }
+
+    const role = roles.find((r) => r.actorId === actorId);
+    if (!role) {
+      return response(404, {
+        message: `Actor ${actorId} has no role in movie ${movieId}`,
+      });
+    }
+    return response(200, { data: role });
   } catch (err) {
-        // Issue 12: the raw error was returned to the caller. It is logged to CloudWatch instead.
+    // Issue 12: the raw error was returned to the caller. It is logged to CloudWatch instead.
     console.error("DynamoDB error:", err);
     return response(500, { message: "Internal server error" });
   }
 };
 
-// Issue P2: only the first page of query results was read.
+// Issue 3: only the first page of query results was read.
 // Follow LastEvaluatedKey until DynamoDB has returned every item in the movie's partition.
 const queryMovieItems = async (movieId: number) => {
   const items: Record<string, any>[] = [];

@@ -41,14 +41,26 @@ export const handler = async (
     const actor = toActor(actorResult.Item);
 
     // Issue 4: ?movie= was validated but never used, so the role was never included.
-    // Fetch the role directly by its key (movieID/actorID) and add it if the actor is in that movie.
+    // Issue 14: an unknown movie was silently ignored; it now returns 404.
+    // Fetch the movie and the role (m#movieID | a#actorID) together; add the role if the actor is in it.
     if (movieId !== undefined) {
-      const roleResult = await ddb.send(
-        new GetCommand({
-          TableName: tableName,
-          Key: { PK: movieKey(movieId), SK: actorKey(actorId) },
-        })
-      );
+      const [movieResult, roleResult] = await Promise.all([
+        ddb.send(
+          new GetCommand({
+            TableName: tableName,
+            Key: { PK: movieKey(movieId), SK: movieKey(movieId) },
+          })
+        ),
+        ddb.send(
+          new GetCommand({
+            TableName: tableName,
+            Key: { PK: movieKey(movieId), SK: actorKey(actorId) },
+          })
+        ),
+      ]);
+      if (!movieResult.Item) {
+        return response(404, { message: `Movie ${movieId} not found` });
+      }
       if (roleResult.Item) {
         return response(200, { data: { ...actor, role: toRole(roleResult.Item) } });
       }
@@ -56,7 +68,7 @@ export const handler = async (
 
     return response(200, { data: actor });
   } catch (err) {
-   // Issue 12: the raw error was returned to the caller. It is logged to CloudWatch instead.
+    // Issue 12: the raw error was returned to the caller. It is logged to CloudWatch instead.
     console.error("DynamoDB error:", err);
     return response(500, { message: "Internal server error" });
   }
