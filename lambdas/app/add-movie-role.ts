@@ -54,11 +54,9 @@ export const handler = async (
     const failedCheck = failedCheckResponse(err, role);
     if (failedCheck) return failedCheck;
 
+    // Issue 12: the raw error was returned to the caller. It is logged to CloudWatch instead.
     console.error("DynamoDB error:", err);
-    return response(500, {
-      message: "Internal server error",
-      error: err,
-    });
+    return response(500, { message: "Internal server error" });
   }
 };
 

@@ -57,11 +57,9 @@ export const handler = async (
     }
     return response(200, { data: resultItems.filter(isRoleItem).map(toRole) });
   } catch (err) {
+        // Issue 12: the raw error was returned to the caller. It is logged to CloudWatch instead.
     console.error("DynamoDB error:", err);
-    return response(500, {
-      message: "Internal server error",
-      error: err,
-    });
+    return response(500, { message: "Internal server error" });
   }
 };
 
