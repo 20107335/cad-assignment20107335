@@ -17,8 +17,10 @@ export const handler = async (
   event: APIGatewayRequestAuthorizerEvent,
 ): Promise<APIGatewayAuthorizerResult> => {
   const token = parseCookies(event.headers?.cookie ?? event.headers?.Cookie)['token'];
+    // Issue 13: a Deny policy made API Gateway return 403. Throwing 'Unauthorized' returns 401,
+  // the correct status when no valid credentials are provided.
   if (!token) {
-    return policy('anonymous', 'Deny', event.methodArn);
+    throw new Error('Unauthorized');
   }
 
   try {
@@ -27,7 +29,7 @@ export const handler = async (
     return policy(payload.sub, 'Allow', event.methodArn, { username });
   } catch (err) {
     console.log('Token verification failed:', (err as Error).message);
-    return policy('anonymous', 'Deny', event.methodArn);
+    throw new Error('Unauthorized');
   }
 };
 
