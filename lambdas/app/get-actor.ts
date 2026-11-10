@@ -12,6 +12,7 @@ import {
 import { response } from "../shared/http";
 import { logRequest } from "../shared/request-logger";
 
+// GET /actors/{actorID}?[movie=movieID]
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
@@ -40,9 +41,8 @@ export const handler = async (
     }
     const actor = toActor(actorResult.Item);
 
-    // Issue 4: ?movie= was validated but never used, so the role was never included.
-    // Issue 14: an unknown movie was silently ignored; it now returns 404.
-    // Fetch the movie and the role (m#movieID | a#actorID) together; add the role if the actor is in it.
+    // With ?movie=, fetch the movie and the role (movieID/actorID) in parallel.
+    // The role is included only if the actor appears in that movie.
     if (movieId !== undefined) {
       const [movieResult, roleResult] = await Promise.all([
         ddb.send(
@@ -68,7 +68,6 @@ export const handler = async (
 
     return response(200, { data: actor });
   } catch (err) {
-    // Issue 12: the raw error was returned to the caller. It is logged to CloudWatch instead.
     console.error("DynamoDB error:", err);
     return response(500, { message: "Internal server error" });
   }

@@ -5,6 +5,7 @@ import { actorKey, ddb, movieKey, parseId, type Role, tableName } from "../share
 import { isResponse, parseJsonObject, response } from "../shared/http";
 import { logRequest } from "../shared/request-logger";
 
+// POST /movies/roles  { movieId, actorId, roleName, roleDescription }
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
@@ -13,15 +14,12 @@ export const handler = async (
   const body = parseJsonObject(event);
   if (isResponse(body)) return body;
 
-  // Issue 9: the body was cast to a Role without any checks, so bad input was saved.
   const role = parseRole(body);
   if (isResponse(role)) return role;
 
   try {
-    // Issue 8: the role was never saved - the handler returned 201 without writing to DynamoDB.
-    // Issue 10: the movie and actor weren't checked and duplicates overwrote existing roles.
-    // One transaction: the movie and actor must exist and the role must not, or nothing is written.
-    // The order of these items matters, failedCheckResponse maps failures by index.
+    // One transaction: the movie and actor must exist and the role must not, or nothing
+    // is written. Item order matters, failedCheckResponse maps failures by index.
     await ddb.send(
       new TransactWriteCommand({
         TransactItems: [
@@ -54,7 +52,6 @@ export const handler = async (
     const failedCheck = failedCheckResponse(err, role);
     if (failedCheck) return failedCheck;
 
-    // Issue 12: the raw error was returned to the caller. It is logged to CloudWatch instead.
     console.error("DynamoDB error:", err);
     return response(500, { message: "Internal server error" });
   }
@@ -101,7 +98,7 @@ const parseRole = (body: Record<string, unknown>): Role | APIGatewayProxyResult 
   return { movieId, actorId, roleName, roleDescription };
 };
 
-// IDs may arrive as JSON numbers or numeric strings; either must be a positive integer.
+// IDs may arrive as JSON numbers or numeric strings, either must be a positive integer.
 const parseBodyId = (value: unknown): number | undefined =>
   typeof value === "number" || typeof value === "string" ? parseId(String(value)) : undefined;
 
